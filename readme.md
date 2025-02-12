@@ -1,7 +1,14 @@
 # `bb_auth.py` - Blackbaud Authentication Module
 
-## **Overview**
+## **Overview and Prerequisites**
 `bb_auth.py` is a Python module that manages authentication for the Blackbaud SKY API. It securely stores credentials using `keyring`, supports OAuth login, and handles token refreshing automatically.
+- You must setup an application first by going to your developer.blackbaud.com account and going to My applications. 
+### **Only after the application is setup:**
+- Get Application ID/OAuth client_id (app_id in json)
+- Primary application secret (app_secret in json)
+- Set up scopes
+- Review and confirm changes in Blackbaud Marketplace as an admin under manage
+- Primary access key found in Developer account>My subscriptions (api_subscription_key in json)
 
 ---
 
@@ -23,7 +30,7 @@ auth = BlackbaudAuth()
 ```
 
 - If an access token is available, it is used.
-- If expired, the script **refreshes the token** automatically.
+- If expired, the script **refreshes the token** automatically .
 - If no valid refresh token exists, the user is prompted to log in.
 
 ---
