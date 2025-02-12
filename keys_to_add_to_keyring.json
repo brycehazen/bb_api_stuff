@@ -1,0 +1,17 @@
+{
+    "sky_app_information": {
+        "app_id": "Application ID (OAuth client_id) after creating an application",
+        "app_secret": "Primary application secret after creating an application"
+    },
+    "tokens": {
+        "access_token": "From http://localhost:13631/ after running bb_auth.py and login to blackbaud, will print to console - VERY LONG",
+        "refresh_token": "response from localhost:13631 - Much shorter"
+    },
+    "other": {
+        "api_subscription_key": "Primary access key found under Developer account",
+        "redirect_uri": "http://localhost:13631/callback",
+    },
+    "webhook": {
+        "domain": "I use grok",
+        "webhook_key": "key"
+    }
