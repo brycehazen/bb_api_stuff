@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-#bb_query.py
+# bb_query.py
 import os
 import time
 import json
@@ -11,8 +11,8 @@ from bb_auth import BlackbaudAuth
 
 EXECUTE_ENDPOINT = "/query/queries/executebyid"
 JOB_STATUS_ENDPOINT_TEMPLATE = "/query/jobs/{job_id}"
-MAX_POLLING_SECONDS = 604800 
-POLL_INTERVAL = 8 
+MAX_POLLING_SECONDS = 604800  # 7 days
+POLL_INTERVAL = 8  # seconds
 
 REQUIRED_FIELDS = ["id", "product", "module"]
 OPTIONAL_FIELDS = [
@@ -23,17 +23,31 @@ OPTIONAL_FIELDS = [
 
 REQUEST_FOLDER = "query_request"
 COMPLETED_FOLDER = "query_completed"
-FAILED_FOLDER = "failed_quests"
-LOG_FOLDER = "api__log"
+FAILED_FOLDER = "query_failed"
+LOG_FOLDER = "api_log"
 
-def ensure_folders():
+def ensure_folders_and_log():
+    """
+    Ensures that the required folders exist and that the api_log.txt file exists.
+    If they do not exist, they are created.
+    """
     for folder in [REQUEST_FOLDER, COMPLETED_FOLDER, FAILED_FOLDER, LOG_FOLDER]:
         if not os.path.exists(folder):
             os.makedirs(folder)
             print(f"Created folder: {folder}")
 
-def wait_for_new_json():
+    # Ensure api_log.txt exists
+    log_file_path = os.path.join(LOG_FOLDER, "api_log.txt")
+    if not os.path.exists(log_file_path):
+        with open(log_file_path, "w") as f:
+            f.write("Log file created\n")
+        print(f"Created log file: {log_file_path}")
 
+def wait_for_new_json():
+    """
+    Waits for a new JSON file to appear in the REQUEST_FOLDER.
+    Returns the path of the first JSON file found.
+    """
     while True:
         json_files = glob.glob(os.path.join(REQUEST_FOLDER, "*.json"))
         if json_files:
@@ -85,6 +99,7 @@ def download_file(url, file_name):
     try:
         r = requests.get(url)
         r.raise_for_status()
+        # If the file name doesn't already have .csv/.json/.txt, default to .csv
         if not any(file_name.lower().endswith(ext) for ext in [".csv", ".json", ".txt"]):
             file_name += ".csv"
         with open(file_name, "wb") as f:
@@ -147,7 +162,6 @@ def process_request_file(auth, file_path):
     return downloaded
 
 def move_processed_files(src_json, downloaded_file, success=True):
-
     dest_folder = COMPLETED_FOLDER if success else FAILED_FOLDER
     dest_json = os.path.join(dest_folder, os.path.basename(src_json))
     shutil.move(src_json, dest_json)
@@ -157,9 +171,11 @@ def move_processed_files(src_json, downloaded_file, success=True):
         shutil.move(downloaded_file, dest_file)
         print(f"Moved downloaded file to {dest_file}")
 
-
 def main():
-    auth = BlackbaudAuth() 
+    # Ensure folders and log file exist before doing anything else
+    ensure_folders_and_log()
+
+    auth = BlackbaudAuth()  # Make sure to adjust if your auth class requires parameters
     print("Starting query processor. Monitoring 'query_request' folder for new JSON files.")
     
     while True:
