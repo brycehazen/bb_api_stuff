@@ -9,7 +9,7 @@
     },
     "other": {
         "api_subscription_key": "Primary access key found under Developer account",
-        "redirect_uri": "http://localhost:13631/callback",
+        "redirect_uri": "http://localhost:13631/callback"
     },
     "webhook": {
         "domain": "I use grok",
