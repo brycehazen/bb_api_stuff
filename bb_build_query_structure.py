@@ -83,15 +83,15 @@ def build_query_structure():
     auth = BlackbaudAuth()
     existing_data = load_existing_data()
     
-    # Step 1: Get query type IDs from log file
+    # type IDs from log file
     query_type_ids = get_query_type_ids()
     if not query_type_ids:
         print("No query_type_ids found in log file.")
         return
 
-    query_structure = existing_data  # Preserve existing data
+    query_structure = existing_data 
 
-    # Step 2: Iterate through each query type
+    #  Iterate through each query type
     for qt_id, qt_name in query_type_ids.items():
         if qt_id in query_structure:
             print(f"Skipping Query Type ID {qt_id} - already processed.")
