@@ -261,3 +261,153 @@ else:
 - It **requires API credentials stored in keyring** (configured via `keyring_cli.py`).
 - JSON files should be **properly formatted** before placing them in `query_request/`.
 
+
+# `bb_query_ftp.py` - Enhanced Query Processor with FTP Support
+
+## **Overview**
+`bb_query_ftp.py` is an enhanced version of the basic query processor that adds FTP upload capabilities. It processes Blackbaud query requests, retrieves the results, and can automatically upload them to an SFTP server. This script is ideal for automated data pipelines that need to move data to other systems.
+
+---
+
+## **How It Works**
+1. **Monitors a folder** (`query_request/`) for new JSON query request files.
+2. **Processes standard or generated queries** based on the JSON format.
+3. **Downloads query results** when jobs complete.
+4. **Optionally uploads** results to an SFTP server.
+5. **Archives processed files** to maintain organization.
+
+---
+
+## **Using `bb_query_ftp.py`**
+### **1. Run the Script**
+```sh
+python bb_query_ftp.py
+```
+- Starts monitoring `query_request/` for new JSON files.
+- Processes requests and handles SFTP uploads as needed.
+
+---
+
+### **2. SFTP Configuration**
+To enable SFTP uploads, store these credentials in keyring:
+```python
+keyring.set_password(SERVICE_NAME, "sftp.host", "your_sftp_host")
+keyring.set_password(SERVICE_NAME, "sftp.username", "your_username")
+keyring.set_password(SERVICE_NAME, "sftp.password", "your_password")
+keyring.set_password(SERVICE_NAME, "sftp.remote_dir", "/path/on/remote/server")
+```
+
+---
+
+### **3. Extended Features**
+- **Improved logging** with detailed status messages
+- **Animation during polling** for better user experience
+- **Automatic archiving** of older completed files
+- **Error handling** with detailed logging
+
+---
+
+## **Example Workflow**
+1. Save a query request JSON file in `query_request/`.
+2. Run `bb_query_ftp.py`.
+3. The script:
+   - Submits the query request
+   - Polls for completion
+   - Downloads results
+   - Uploads to SFTP server (if configured)
+   - Archives processed files
+
+---
+
+# `notify_email.py` - Email Notifications for Completed Queries
+
+## **Overview**
+`notify_email.py` monitors the `query_completed/` folder and sends email notifications when new files appear. This helps users stay informed about completed Blackbaud queries without needing to check manually.
+
+---
+
+## **How It Works**
+1. **Monitors the `query_completed/` folder** for new files.
+2. **Tracks processed files** to avoid duplicate notifications.
+3. **Sends email notifications** with details about new files.
+4. **Logs all activity** for troubleshooting.
+
+---
+
+## **Configuration**
+Store email credentials in keyring:
+```python
+keyring.set_password(SERVICE_NAME, "email.from", "your_email@example.com")
+keyring.set_password(SERVICE_NAME, "email.password", "your_password")
+keyring.set_password(SERVICE_NAME, "email.to", "recipient@example.com")
+keyring.set_password(SERVICE_NAME, "email.smtp_server", "smtp.gmail.com")
+keyring.set_password(SERVICE_NAME, "email.smtp_port", "587")
+```
+
+---
+
+## **Using `notify_email.py`**
+### **Run Once**
+```sh
+python notify_email.py
+```
+
+### **Run as Daemon**
+```sh
+python notify_email.py --daemon
+```
+- Checks for new files every minute
+- Sends notifications for any newly detected files
+
+---
+
+# `notify_pushover.py` - Push Notifications for Completed Queries
+
+## **Overview**
+`notify_pushover.py` sends push notifications to your devices via Pushover when new files appear in the `query_completed/` folder. This provides immediate mobile notifications when Blackbaud queries complete.
+
+---
+
+## **How It Works**
+1. **Monitors the `query_completed/` folder** for new files.
+2. **Tracks processed files** to avoid duplicate notifications.
+3. **Sends push notifications** through Pushover's API.
+4. **Logs all activity** for troubleshooting.
+
+---
+
+## **Configuration**
+Register for a Pushover account and store credentials in keyring:
+```python
+keyring.set_password(SERVICE_NAME, "pushover.app_token", "your_app_token")
+keyring.set_password(SERVICE_NAME, "pushover.user_key", "your_user_key")
+```
+
+---
+
+## **Using `notify_pushover.py`**
+### **Run Once**
+```sh
+python notify_pushover.py
+```
+
+### **Run as Daemon**
+```sh
+python notify_pushover.py --daemon
+```
+- Checks for new files every minute
+- Sends push notifications for any newly detected files
+
+---
+
+## **Additional Notification Options**
+For SMS notifications, use the included `notify_sms.py` script with Twilio:
+```python
+keyring.set_password(SERVICE_NAME, "twilio.account_sid", "your_account_sid")
+keyring.set_password(SERVICE_NAME, "twilio.auth_token", "your_auth_token")
+keyring.set_password(SERVICE_NAME, "twilio.from_number", "+1234567890")
+keyring.set_password(SERVICE_NAME, "twilio.to_number", "+1987654321")
+```
+
+Run it the same way as the other notification scripts.
+
