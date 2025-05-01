@@ -1,5 +1,9 @@
+import sys
+# directory containing secure_keyring.py to python 
+sys.path.append(r"C:\path\keyring")
+import secure_keyring  # type: ignore
+import keyring  
 import requests
-import keyring
 import webbrowser
 import http.server
 import socketserver
@@ -7,17 +11,35 @@ import json
 from urllib.parse import urlparse, parse_qs
 from typing import Dict, Any, Optional
 
-# Use the correct service name from keyring_cli.py
+#  keyring_cli
 SERVICE_NAME = "GlobalSecrets"
 
 # Retrieve stored credentials
-CLIENT_ID = keyring.get_password(SERVICE_NAME, "sky_app_information.app_id")
-CLIENT_SECRET = keyring.get_password(SERVICE_NAME, "sky_app_information.app_secret")
-REDIRECT_URI = keyring.get_password(SERVICE_NAME, "other.redirect_url") or "http://localhost:13631/"
+CLIENT_ID = secure_keyring.get_password("sky_app_information.app_id")
+CLIENT_SECRET = secure_keyring.get_password("sky_app_information.app_secret")
+REDIRECT_URI = secure_keyring.get_password("other.redirect_url") or "http://localhost:13631/"
 
-# OAuth URLs
+# OAuth
 AUTH_URL = "https://app.blackbaud.com/oauth/authorize"
 TOKEN_URL = "https://oauth2.sky.blackbaud.com/token"
+
+class RequestFailedException(Exception):
+    """
+    Custom exception to capture HTTP status code, error text, and JSON details.
+    """
+    def __init__(self, status_code: int, error_text: str, error_json: Optional[dict] = None):
+        self.status_code = status_code
+        self.error_text = error_text
+        self.error_json = error_json
+        message = f"Request failed with status {status_code}. Response: {error_text}"
+        super().__init__(message)
+
+class ResponseStatusCodes(Exception):
+    def __init__(self, status_code: int, message: str, retry_after: Optional[int] = None):
+        self.status_code = status_code
+        self.message = message
+        self.retry_after = retry_after
+        super().__init__(f"Error {status_code}: {message}")
 
 class ResponseStatusCodes(Exception):
     def __init__(self, status_code: int, message: str, retry_after: Optional[int] = None):
@@ -29,8 +51,8 @@ class ResponseStatusCodes(Exception):
 class BlackbaudAuth:
     def __init__(self):
         """Initialize BlackbaudAuth using keyring for secrets."""
-        self.access_token = keyring.get_password(SERVICE_NAME, "tokens.access_token")
-        self.refresh_token = keyring.get_password(SERVICE_NAME, "tokens.refresh_token")
+        self.access_token = secure_keyring.get_password("tokens.access_token")
+        self.refresh_token = secure_keyring.get_password("tokens.refresh_token")
 
         if not CLIENT_ID or not CLIENT_SECRET:
             raise ValueError("CLIENT_ID or CLIENT_SECRET not found in keyring. Run `python keyring_cli.py store --key sky_app_information.app_id --value YOUR_CLIENT_ID`")
@@ -64,8 +86,8 @@ class BlackbaudAuth:
         token_data = response.json()
 
         # Store tokens securely in keyring
-        keyring.set_password(SERVICE_NAME, "tokens.access_token", token_data["access_token"])
-        keyring.set_password(SERVICE_NAME, "tokens.refresh_token", token_data["refresh_token"])
+        secure_keyring.set_password("tokens.access_token", token_data["access_token"], "OAuth access token")
+        secure_keyring.set_password("tokens.refresh_token", token_data["refresh_token"], "OAuth refresh token")
 
         self.access_token = token_data["access_token"]
         self.refresh_token = token_data["refresh_token"]
@@ -92,8 +114,8 @@ class BlackbaudAuth:
             token_data = response.json()
 
             # Update stored tokens
-            keyring.set_password(SERVICE_NAME, "tokens.access_token", token_data["access_token"])
-            keyring.set_password(SERVICE_NAME, "tokens.refresh_token", token_data["refresh_token"])
+            secure_keyring.set_password("tokens.access_token", token_data["access_token"], "OAuth access token")
+            secure_keyring.set_password("tokens.refresh_token", token_data["refresh_token"], "OAuth refresh token")
 
             self.access_token = token_data["access_token"]
             self.refresh_token = token_data["refresh_token"]
@@ -110,33 +132,59 @@ class BlackbaudAuth:
 
         session = requests.Session()
         session.headers = {
-            'Bb-Api-Subscription-Key': keyring.get_password(SERVICE_NAME, "other.api_subscription_key"),
+            'Bb-Api-Subscription-Key': secure_keyring.get_password("other.api_subscription_key"),
             'Authorization': f"Bearer {self.access_token}"
         }
         return session
 
-    def make_request(self, method: str, endpoint: str, params: Optional[Dict] = None, data: Optional[Dict] = None) -> Optional[Dict[str, Any]]:
-        """Make an authenticated request."""
+    def make_request(self, method: str, endpoint: str,
+                     params: Optional[Dict] = None,
+                     data: Optional[Dict] = None) -> Dict[str, Any]:
+        """
+        Make an authenticated request. Raises RequestFailedException on error.
+        """
         session = self.get_session()
-        url = f"https://api.sky.blackbaud.com{endpoint}"
+        url = f"https://api.sky.blackbaud.com{endpoint}" # important to remember - this will do the base url for all requests
 
         try:
             response = session.request(method, url, params=params, json=data)
 
+            # If 401, try refreshing token once
             if response.status_code == 401:
-                print("Unauthorized error. Attempting to refresh token...")
+                print("Unauthorized (401). Attempting to refresh token...")
                 if self.refresh_access_token():
                     session = self.get_session()
                     response = session.request(method, url, params=params, json=data)
                 else:
-                    print("Re-authentication required.")
-                    return None
+                    raise RequestFailedException(
+                        status_code=401,
+                        error_text="Re-authentication required; 401 Unauthorized",
+                    )
 
-            response.raise_for_status()
+            # Check if the response is OK (200-299); if not, capture error details
+            if not response.ok:
+                status_code = response.status_code
+                try:
+                    error_json = response.json()
+                    error_text = json.dumps(error_json, indent=2)
+                except Exception:
+                    error_json = None
+                    error_text = response.text.strip()
+
+                raise RequestFailedException(
+                    status_code=status_code,
+                    error_text=error_text,
+                    error_json=error_json
+                )
+
             return response.json()
+
         except requests.exceptions.RequestException as err:
-            print(f"Request failed: {err}")
-            return None
+            raise RequestFailedException(
+                status_code=-1,
+                error_text=f"Request Exception occurred: {err}"
+            )
+
 
 class OAuthCallbackHandler(http.server.BaseHTTPRequestHandler):
     """Handle OAuth callback from Blackbaud login."""
