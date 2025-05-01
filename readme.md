@@ -272,9 +272,10 @@ else:
 ## **How It Works**
 1. **Monitors a folder** (`query_request/`) for new JSON query request files.
 2. **Processes standard or generated queries** based on the JSON format.
-3. **Downloads query results** when jobs complete.
-4. **Optionally uploads** results to an SFTP server.
-5. **Archives processed files** to maintain organization.
+3. Specific json file names, trigger specific classes to process the query output file
+4. **Downloads query results** when jobs complete.
+5. **Optionally uploads** results to an SFTP server.
+6. **Archives processed files** to maintain organization.
 
 ---
 
