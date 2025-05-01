@@ -138,34 +138,62 @@ else:
 - Everything is stored in **keyring** and securely managed.
 - Refresh tokens are automatically updated to prevent expired credentials.
 
+---
 
-# `bb_query.py` - Blackbaud Query Processor
+## **Notes**
+- This script **relies on `bb_auth.py` for authentication**.
+- It **requires API credentials stored in keyring** (configured via `keyring_cli.py`).
+- JSON files should be **properly formatted** before placing them in `query_request/`.
+
+
+# `bb_query_ftp.py` - Main hub - Auth using bb_auth and triggers workflows
 
 ## **Overview**
-`bb_query.py` is a script designed to process query requests for the Blackbaud SKY API. It integrates with `bb_auth.py` to handle authentication and securely store credentials using `keyring`. The script monitors a folder for new JSON query request files, processes them, and retrieves results.
+`bb_query_ftp.py` Monitors folder waiting for specified file types and names. Depnding on the file name and type, triggers specific workflows. It processes Blackbaud query requests, retrieves the results, and can automatically upload them to an SFTP server. This script is ideal for automated data pipelines that need to move data to other systems. Windows Task scheduler is used to move files to tigger recurring workflows.
 
 ---
 
 ## **How It Works**
 1. **Monitors a folder** (`query_request/`) for new JSON query request files.
-2. **Validates query data** to ensure all required fields exist.
-3. **Submits the request** to the Blackbaud API.
-4. **Polls the job status** until the query is completed.
-5. **Downloads the results** and moves processed files to `query_completed/` or `failed_requests/`.
+2. **Processes standard or generated queries** based on the JSON format.
+3. Specific json file names, trigger specific classes to process the query output file
+4. **Downloads query results** when jobs complete.
+5. **Optionally uploads** results to an SFTP server.
+6. **Archives processed files** to maintain organization.
+
+## **Key Functions**
+### **1. `post_query_request(auth, data)`**
+- Submits a query request to the Blackbaud API.
+
+### **2. `poll_job_status(auth, job_id, query_params)`**
+- Monitors the status of an ongoing API query job.
+
+### **3. `download_file(url, file_name)`**
+- Downloads query results once completed.
+
+### **4. `log_event(message)`**
+- Logs API interactions in `api_log/`.
+
+## **Folder Structure**
+| **Folder**          | **Description** |
+|---------------------|----------------|
+| `query_request/`   | New JSON query request files |
+| `query_completed/` | Successfully processed requests |
+| `failed_requests/` | Failed query requests |
+| `api_log/`         | Logs of API interactions |
+
 
 ---
 
-## **Using `bb_query.py`**
-### **1. Run the Script**
-```sh
-python bb_query.py
-```
-- Starts monitoring `query_request/` for new JSON files.
-- Processes requests as they appear.
+### **Processing Flow**
+1. Script detects a new file in `query_request/`.
+2. Submits the request to the Blackbaud API.
+3. Polls the job status until completion.
+4. Downloads the results and moves processed files:
+   - Successful requests → `query_completed/`
+   - Failed requests → `failed_requests/`
 
----
-
-### **2. JSON Query Request Format**
+### **JSON Query Request Format**
 A query request file must contain:
 ```json
 {
@@ -180,16 +208,16 @@ A query request file must contain:
 - `"product"`: The Blackbaud product (e.g., `"RE"` for Raiser's Edge).
 - `"module"`: The API module being queried.
 - Optional fields like `"ux_mode"`, `"output_format"`, `"results_file_name"`.
+- Use the name of the json file to trigger different workflows. 
 
----
 
-### **3. Processing Flow**
-1. Script detects a new file in `query_request/`.
-2. Submits the request to the Blackbaud API.
-3. Polls the job status until completion.
-4. Downloads the results and moves processed files:
-   - Successful requests → `query_completed/`
-   - Failed requests → `failed_requests/`
+## **Using `bb_query_ftp.py`**
+### **1. Run the Script**
+```sh
+python bb_query_ftp.py
+```
+- Starts monitoring `query_request/` for new JSON files.
+- Processes requests and handles SFTP uploads as needed.
 
 ---
 
@@ -217,77 +245,6 @@ if response:
 else:
     print("Query execution failed.")
 ```
-
----
-
-## **Folder Structure**
-| **Folder**          | **Description** |
-|---------------------|----------------|
-| `query_request/`   | New JSON query request files |
-| `query_completed/` | Successfully processed requests |
-| `failed_requests/` | Failed query requests |
-| `api_log/`         | Logs of API interactions |
-
----
-
-## **Example Workflow**
-1. Save a query request JSON file in `query_request/`.
-2. Run `bb_query.py`.
-3. The script:
-   - Submits the request.
-   - Polls for job completion.
-   - Downloads results into `query_completed/`.
-4. Check logs in `api_log/` for details.
-
----
-
-## **Key Functions**
-### **1. `post_query_request(auth, data)`**
-- Submits a query request to the Blackbaud API.
-
-### **2. `poll_job_status(auth, job_id, query_params)`**
-- Monitors the status of an ongoing API query job.
-
-### **3. `download_file(url, file_name)`**
-- Downloads query results once completed.
-
-### **4. `log_event(message)`**
-- Logs API interactions in `api_log/`.
-
----
-
-## **Notes**
-- This script **relies on `bb_auth.py` for authentication**.
-- It **requires API credentials stored in keyring** (configured via `keyring_cli.py`).
-- JSON files should be **properly formatted** before placing them in `query_request/`.
-
-
-# `bb_query_ftp.py` - Enhanced Query Processor with FTP Support
-
-## **Overview**
-`bb_query_ftp.py` is an enhanced version of the basic query processor that adds FTP upload capabilities. It processes Blackbaud query requests, retrieves the results, and can automatically upload them to an SFTP server. This script is ideal for automated data pipelines that need to move data to other systems.
-
----
-
-## **How It Works**
-1. **Monitors a folder** (`query_request/`) for new JSON query request files.
-2. **Processes standard or generated queries** based on the JSON format.
-3. Specific json file names, trigger specific classes to process the query output file
-4. **Downloads query results** when jobs complete.
-5. **Optionally uploads** results to an SFTP server.
-6. **Archives processed files** to maintain organization.
-
----
-
-## **Using `bb_query_ftp.py`**
-### **1. Run the Script**
-```sh
-python bb_query_ftp.py
-```
-- Starts monitoring `query_request/` for new JSON files.
-- Processes requests and handles SFTP uploads as needed.
-
----
 
 ### **2. SFTP Configuration**
 To enable SFTP uploads, store these credentials in keyring:
