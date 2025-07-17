@@ -113,7 +113,7 @@ class BlackbaudAuth:
             response.raise_for_status()
             token_data = response.json()
 
-            # Update stored tokens
+            #  Update stored tokens
             secure_keyring.set_password("tokens.access_token", token_data["access_token"], "OAuth access token")
             secure_keyring.set_password("tokens.refresh_token", token_data["refresh_token"], "OAuth refresh token")
 
@@ -125,14 +125,20 @@ class BlackbaudAuth:
             self.authenticate_user()
             return False
 
-    def get_session(self) -> requests.Session:
-        """Get a configured requests session with appropriate headers."""
+    def get_session(self, use_payment_key=False) -> requests.Session:
+        """Get a configured requests session with appropriate headers. If use_payment_key is True, use the payment subscription key."""
         if not self.access_token:
             self.refresh_access_token()  # Ensure valid token
 
         session = requests.Session()
+        if use_payment_key:
+            sub_key = secure_keyring.get_password("other.payment_subscription_key")
+            if not sub_key:
+                sub_key = secure_keyring.get_password("other.api_subscription_key")
+        else:
+            sub_key = secure_keyring.get_password("other.api_subscription_key")
         session.headers = {
-            'Bb-Api-Subscription-Key': secure_keyring.get_password("other.api_subscription_key"),
+            'Bb-Api-Subscription-Key': sub_key,
             'Authorization': f"Bearer {self.access_token}"
         }
         return session
@@ -141,26 +147,54 @@ class BlackbaudAuth:
                      params: Optional[Dict] = None,
                      data: Optional[Dict] = None) -> Dict[str, Any]:
         """
-        Make an authenticated request. Raises RequestFailedException on error.
+        Make an authenticated request. If a 401 with invalid subscription key is returned, retry with payment key.
+        If both fail, print the error JSON as specified and return None.
         """
-        session = self.get_session()
-        url = f"https://api.sky.blackbaud.com{endpoint}" # important to remember - this will do the base url for all requests
-
+        url = f"https://api.sky.blackbaud.com{endpoint}"
+        # First try with default key
+        session = self.get_session(use_payment_key=False)
         try:
             response = session.request(method, url, params=params, json=data)
-
-            # If 401, try refreshing token once
             if response.status_code == 401:
-                print("Unauthorized (401). Attempting to refresh token...")
-                if self.refresh_access_token():
-                    session = self.get_session()
+                try:
+                    error_json = response.json()
+                    error_text = json.dumps(error_json, indent=2)
+                except Exception:
+                    error_json = None
+                    error_text = response.text.strip()
+                # Check for invalid subscription key message
+                if error_json and "invalid subscription key" in error_json.get("message", "").lower():
+                    # Try with payment key
+                    session = self.get_session(use_payment_key=True)
                     response = session.request(method, url, params=params, json=data)
+                    if response.status_code == 401:
+                        try:
+                            error_json = response.json()
+                            error_text = json.dumps(error_json, indent=2)
+                        except Exception:
+                            error_json = None
+                            error_text = response.text.strip()
+                        if error_json and "invalid subscription key" in error_json.get("message", "").lower():
+                            print(error_text)
+                            return None
+                        else:
+                            raise RequestFailedException(
+                                status_code=401,
+                                error_text=error_text,
+                                error_json=error_json
+                            )
+                    # If not 401, continue as normal
                 else:
-                    raise RequestFailedException(
-                        status_code=401,
-                        error_text="Re-authentication required; 401 Unauthorized",
-                    )
-
+                    # Not a subscription key error, try refresh
+                    print("Unauthorized (401). Attempting to refresh token...")
+                    if self.refresh_access_token():
+                        session = self.get_session(use_payment_key=False)
+                        response = session.request(method, url, params=params, json=data)
+                    else:
+                        raise RequestFailedException(
+                            status_code=401,
+                            error_text="Re-authentication required; 401 Unauthorized",
+                        )
             # Check if the response is OK (200-299); if not, capture error details
             if not response.ok:
                 status_code = response.status_code
@@ -170,15 +204,12 @@ class BlackbaudAuth:
                 except Exception:
                     error_json = None
                     error_text = response.text.strip()
-
                 raise RequestFailedException(
                     status_code=status_code,
                     error_text=error_text,
                     error_json=error_json
                 )
-
             return response.json()
-
         except requests.exceptions.RequestException as err:
             raise RequestFailedException(
                 status_code=-1,
@@ -206,3 +237,4 @@ class OAuthCallbackHandler(http.server.BaseHTTPRequestHandler):
             self.send_response(400)
             self.end_headers()
             self.wfile.write(b"<html><body><h1>Authentication Failed</h1><p>No authorization code received.</p></body></html>")
+
